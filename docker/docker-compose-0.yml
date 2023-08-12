@@ -5,26 +5,84 @@ services:
     secrets:
       - pq_password
     environment:
-      - POSTGRES_USER=postgres_user
-      - POSTGRES_DB=orders
+      - POSTGRES_USER=${POSTGRES_USER:-postgres_user}
+      - POSTGRES_DB=${POSTGRES_DB:-orders}
       - POSTGRES_PASSWORD_FILE=/run/secrets/pq_password
     networks:
       - orders-api
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli ping | grep PONG" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orders-api
+
+  celery:
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile
+      target: celery
+    secrets:
+      - pq_password
+    environment:
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_HOST:-6379}
+      - SMTP_PORT=${SMTP_PORT:-25}
+      - SMTP_HOST=${SMTP_HOST:-smtp}
+      - PQ_PASSWORD=/run/secrets/pq_password
+      - PQ_USER=${POSTGRES_USER:-postgres_user}
+      - PQ_DB_NAME=${POSTGRES_DB:-orders}
+      - PQ_HOST=${POSTGRES_HOST:-db}
+      - PQ_PORT=${POSTGRES_PORT:-5432}
+    networks:
+      - orders-api
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A orders_api status"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   app:
-    image: final:1.1
-    command: run-app runserver 0.0.0.0:8000
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile
+      target: app
     secrets:
-     - pq_password
+      - pq_password
     environment:
       - PQ_PASSWORD=/run/secrets/pq_password
-      - PQ_USER=postgres_user
-      - PQ_DB_NAME=orders
-      - PQ_HOST=db
-      - PQ_PORT=5432
+      - PQ_USER=${POSTGRES_USER:-postgres_user}
+      - PQ_DB_NAME=${POSTGRES_DB:-orders}
+      - PQ_HOST=${POSTGRES_HOST:-db}
+      - PQ_PORT=${POSTGRES_PORT:-5432}
+      - SECRET_KEY=/run/secrets/django_secret_key
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_HOST:-6379}
     ports:
       - target: 8000
         published: 80
+    networks:
+      - orders-api
+    depends_on:
+      celery:
+        condition: service_healthy
+
+  smtp:
+    image: bytemark/smtp:latest
     networks:
       - orders-api
 
@@ -34,4 +92,6 @@ networks:
 
 secrets:
   pq_password:
-    file: ./pq_password.txt
+    file: ./secrets/pq_password.txt
+  django_secret_key:
+    file: ./secrets/django_secret.txt
