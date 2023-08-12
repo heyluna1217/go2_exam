@@ -33,18 +33,15 @@ def get_secret(key, default):
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-2p)uj@%dil(&en!i1)j&s$9nxkepn$oyb-#mfy6w6hj%wzo*9&"
+SECRET_KEY = f"{get_secret('SECRET_KEY', '')}"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
-
+DEBUG = False
+ALLOWED_HOSTS = ["0.0.0.0", "localhost"]
 
 # Application definition
 
@@ -56,11 +53,12 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
-    "orders_api.api"
+    "orders_api",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -89,18 +87,17 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "orders_api.wsgi.application"
 
-
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": get_secret("PQ_DB_NAME", "orders"),
-        "USER": get_secret("PQ_USER", "postgres_user"),
+        "NAME": os.getenv("PQ_DB_NAME", "orders"),
+        "USER": os.getenv("PQ_USER", "postgres_user"),
         "PASSWORD": get_secret("PQ_PASSWORD", ""),
-        "HOST": get_secret("PQ_HOST", "db"),
-        "PORT": get_secret("PQ_PORT", "5432"),
+        "HOST": os.getenv("PQ_HOST", "db"),
+        "PORT": os.getenv("PQ_PORT", "5432"),
     }
 }
 
@@ -122,7 +119,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
@@ -134,11 +130,11 @@ USE_I18N = True
 
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = "./staticfiles"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -146,7 +142,16 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
-    # Use Django's standard `django.contrib.auth` permissions,
-    # or allow read-only access for unauthenticated users.
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly"]
+    "DEFAULT_PERMISSION_CLASSES": [
+        # Disable permission classess for simplicity
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,
 }
+
+EMAIL_HOST = f"{os.getenv('SMTP_HOST', 'smtp')}"
+EMAIL_PORT = os.getenv("SMTP_PORT", "25")
+
+CELERY_BROKER_URL = f"redis://{os.getenv('REDIS_HOST', 'redis')}:{os.getenv('REDIS_PORT', '6379')}"
+CELERY_RESULT_BACKEND = f"redis://{os.getenv('REDIS_HOST', 'redis')}:{os.getenv('REDIS_PORT', '6379')}"
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
